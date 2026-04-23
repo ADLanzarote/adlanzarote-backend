@@ -6,41 +6,43 @@ const db = require('../config/db');
 
 // POST /auth/login
 router.post('/login', async (req, res) => {
-  const { usuario, password } = req.body;
+  const email = req.body.email || req.body.usuario;
+  const password = req.body.password || req.body.contrasena;
 
-  if (!usuario || !password) {
-    return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email/Usuario y contraseña son requeridos' });
   }
 
   try {
     const [rows] = await db.query(
-      'SELECT * FROM usuarios WHERE usuario = ? OR email = ? LIMIT 1',
-      [usuario, usuario]
+      'SELECT * FROM usuarios WHERE email = ? LIMIT 1',
+      [email]
     );
 
     if (rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      console.log('Login failed: User not found:', email);
+      return res.status(401).json({ error: 'Credenciales inválidas (Error 1)' });
     }
 
     const user = rows[0];
 
-    // Soporte para password en texto plano o bcrypt
+    // Soporte para contrasena en texto plano o bcrypt
     let passwordOk = false;
-    if (user.password && user.password.startsWith('$2')) {
-      passwordOk = await bcrypt.compare(password, user.password);
+    if (user.contrasena && user.contrasena.startsWith('$2')) {
+      passwordOk = await bcrypt.compare(password, user.contrasena);
     } else {
-      passwordOk = password === user.password;
+      passwordOk = password === user.contrasena;
     }
 
     if (!passwordOk) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      console.log('Login failed: Incorrect password for:', email);
+      return res.status(401).json({ error: 'Credenciales inválidas (Error 2)' });
     }
 
     const token = jwt.sign(
       {
         id: user.id,
-        nombre: user.nombre || user.usuario,
-        usuario: user.usuario,
+        email: user.email,
         nivel: user.nivel,
       },
       process.env.JWT_SECRET,
@@ -51,10 +53,8 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user.id,
-        nombre: user.nombre || user.usuario,
-        usuario: user.usuario,
+        email: user.email,
         nivel: user.nivel,
-        email: user.email || null,
       },
     });
   } catch (err) {
